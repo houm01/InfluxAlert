@@ -15,21 +15,24 @@ from cc_feishu.client import Client as FeishuClient
 class BaseClient:
     
     def __init__(self, 
-                 influx_host, 
-                 influx_port,
-                 influx_username,
-                 influx_password,
-                 influx_database,
-                 influx_ssl,
-                 mongo_host,
-                 mongo_port,
-                 mongo_username,
-                 mongo_password,
-                 mongo_authsource,
-                 mongo_database,
-                 feishu_app_id,
-                 feishu_app_secret,
-                 wecom_webhook_url):
+                 influx_host: str=None, 
+                 influx_port: int=8086,
+                 influx_username: str=None,
+                 influx_password: str=None,
+                 influx_database: str='telegraf',
+                 influx_ssl: bool=True,
+                 mongo_host: str='127.0.0.1',
+                 mongo_port: int=27017,
+                 mongo_username: str=None,
+                 mongo_password: str=None,
+                 mongo_authsource: str='admin',
+                 mongo_database: str='automate',
+                 feishu_app_id: str=None,
+                 feishu_app_secret: str=None,
+                 feishu_card_template_id: str=None,
+                #  feishu_card_template_variable: str=None,
+                 feishu_card_receive_id: str=None,
+                 wecom_webhook_url: str=None):
         
         self._influx_host = influx_host
         self._influx_port = influx_port
@@ -45,9 +48,11 @@ class BaseClient:
         self._mongo_authsource = mongo_authsource
         self._mongo_database = mongo_database
     
-        # self.webhook_url = webhook_url
         self.feishu_app_id = feishu_app_id
         self.feishu_app_secret = feishu_app_secret
+        self.feishu_card_template_id = feishu_card_template_id
+        # self.feishu_card_template_variable = feishu_card_template_variable
+        self.feishu_card_receive_id = feishu_card_receive_id
         
         self.wecom_webhook_url = wecom_webhook_url
         

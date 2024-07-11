@@ -37,9 +37,7 @@ class ExtensionsEndpoint(Endpoint):
     #     self.PING_RESOLVED = 5
     #     self.BFD_LIMIT = 8
 
-    
-    @staticmethod
-    def convert_timeobj_to_str(timeobj: str=None, timezone_offset: int=8):
+    def time_convert_timeobj_to_str(self, timeobj: str=None, timezone_offset: int=8):
         time_obj_with_offset = timeobj + datetime.timedelta(hours=timezone_offset)
         return time_obj_with_offset.strftime("%Y-%m-%d %H:%M")
 
@@ -253,6 +251,7 @@ class ExtensionsEndpoint(Endpoint):
             '''
             if event_type == 'trigger':
                 event_id = str(uuid.uuid4())
+                feishu_card_color = 'red'
 
             # 如果为 True, 表示需要插入告警
             if self.mongo_check_alarm_exist(event_type=event_type, alarm_content=alarm_content):
@@ -277,30 +276,40 @@ class ExtensionsEndpoint(Endpoint):
                     elif event_type == 'resolved':
                         log.debug(f'发现告警恢复: [{alarm_content}]')
                         self.mongo_update_resolved(doc_id=mongo_id, resolved_time=self.time_get_now_time_mongo())
+                        feishu_card_color = 'green'
+                        resolved_time = self.time_get_now_time_mongo()
                         
                 if is_notify:
-                    # alert_dict = onealert.build_alert(
-                    #     event_id=event_id,
-                    #     event_type=event_type,
-                    #     entity_name=entity_name,
-                    #     alarm_name=alarm_name,
-                    #     alarm_content=alarm_content,
-                    #     priority=priority,
-                    #     automate_ts=Troubleshoot.alert_counter(alarm_content) + '\n' +automate_ts,
-                    #     suggestion=suggestion,
-                    #     referce_name=referce_name,
-                    #     referce_link=referce_link)
+                    
+                    alert_dict = { 
+                        "eventId": event_id, 
+                        "eventType": event_type, 
+                        "alarmName": alarm_name, 
+                        "entityName": entity_name, 
+                        "priority": priority, 
+                        "alarmContent": alarm_content, 
+                        "alarm_time": alarm_time,
+                        "details": '\n' + f'**自动排查**: {automate_ts}' + '\n' + '**处置建议**: ' + suggestion + '\n' + f'**参考文档**: [{referce_name}]({referce_link})' + '\n'
+                    }
 
-                        # onealert.send_notify_test(alert_dict=alert_dict)
+                    template_variable= {
+                        "color": feishu_card_color,
+                        "alarm_time": self.time_convert_timeobj_to_str(timeobj=alarm_time, timezone_offset=0),
+                        "alarm_name": alarm_name,
+                        "alarm_content": alarm_content,
+                        "priority": priority,
+                        "details": '该告警出现过: ' + str(self.query_alert_counter(alarm_content)) + '次' + '\n' + alert_dict['details']
+                    }
+                    log.info(template_variable)
 
-                    # self.parent.feishu_send_card()
-                    # self.parent.
+
                     self.parent.feishu_client.message.send_card(
-                        template_id='ctp_AA6DQip4Ix5K',
-                        template_variable={"title": alarm_content, "content": ""},
-                        receive_id ='ou_ca3fc788570865cbbf59bfff43621a78'
+                        template_id=self.parent.feishu_card_template_id,
+                        template_variable= template_variable,
+                        receive_id =self.parent.feishu_card_receive_id
                     )
                     
+                    self.notify_wecom_markdown(alert_dict=alert_dict)
                     
 
     def mongo_check_alarm_exist(self, event_type, alarm_content) -> bool:
@@ -517,18 +526,27 @@ class ExtensionsEndpoint(Endpoint):
         payload = json.dumps(card_content)
         # response = requests.request(method='POST', url='https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=ccb38d89-e63f-4be1-b620-b7c95cc76b43', data=payload, headers=self.headers, timeout=3)
         response2 = requests.request(method='POST',
-                                     url='https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=a7b5afa4-2deb-49b6-9e9f-2f55dcfabad1', 
+                                     url=self.parent.wecom_webhook_url, 
                                      data=payload,
                                      headers=self.headers,
                                      timeout=3)
-        
-        response2 = requests.request(method='POST',
-                                url='https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=ccb38d89-e63f-4be1-b620-b7c95cc76b43',
-                                data=payload,
-                                headers=self.headers, 
-                                timeout=3)
         return response2.text
 
 
     def notify_onealert(self):
         pass
+    
+    def query_alert_counter(self, alarm_content: str) -> str:
+        '''
+        _summary_
+
+        Args:
+            alarm_content (str): _description_
+
+        Returns:
+            str: _description_
+        '''
+        query = {"alarm_content": alarm_content}
+        # count = mongo.collection.count_documents(query)
+        return self.parent.mongo_client.count_documents(query)
+        # return count
