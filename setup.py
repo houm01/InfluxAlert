@@ -6,10 +6,10 @@ this_directory = Path(__file__).parent
 long_description = (this_directory / "README.md").read_text()
 
 
-VERSION = '0.0.4'
+VERSION = '0.0.5'
 
 setup(
-    name='influx_alert',  # package name
+    name='InfluxAlert',  # package name
     version=VERSION,  # package version
     description='influx alert',  # package description
     packages=find_packages(),
