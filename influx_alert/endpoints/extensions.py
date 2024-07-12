@@ -1,13 +1,18 @@
-from ..endpoint import Endpoint
-import pymongo
-import uuid
-from nb_log import get_logger
-import pytz
+#!/usr/bin/env python3
+
+import re
+import json
 import datetime
 import time
-import re
+import uuid
+import pytz
+
+import pymongo
 import requests
-import json
+from nb_log import get_logger
+
+from ..endpoint import Endpoint
+
 
 log = get_logger('extensions')
 
@@ -302,14 +307,15 @@ class ExtensionsEndpoint(Endpoint):
                     }
                     log.info(template_variable)
 
-
-                    self.parent.feishu_client.message.send_card(
-                        template_id=self.parent.feishu_card_template_id,
-                        template_variable= template_variable,
-                        receive_id =self.parent.feishu_card_receive_id
-                    )
+                    if self.parent.feishu_app_id:
+                        self.parent.feishu_client.message.send_card(
+                            template_id=self.parent.feishu_card_template_id,
+                            template_variable= template_variable,
+                            receive_id =self.parent.feishu_card_receive_id
+                        )
                     
-                    self.notify_wecom_markdown(alert_dict=alert_dict)
+                    if self.parent.wecom_webhook_url:
+                        self.notify_wecom_markdown(alert_dict=alert_dict)
                     
 
     def mongo_check_alarm_exist(self, event_type, alarm_content) -> bool:
@@ -456,8 +462,6 @@ class ExtensionsEndpoint(Endpoint):
 
 
     def send_notify_wecom_card(self, alert_dict):
-        print(alert_dict)
-        
         if alert_dict['eventType'] == 'trigger':
             source_desc = '告警!'
             icon_url = "https://cdn-icons-png.flaticon.com/128/16750/16750201.png"
@@ -524,13 +528,12 @@ class ExtensionsEndpoint(Endpoint):
             }
         }
         payload = json.dumps(card_content)
-        # response = requests.request(method='POST', url='https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=ccb38d89-e63f-4be1-b620-b7c95cc76b43', data=payload, headers=self.headers, timeout=3)
-        response2 = requests.request(method='POST',
+        response = requests.request(method='POST',
                                      url=self.parent.wecom_webhook_url, 
                                      data=payload,
                                      headers=self.headers,
                                      timeout=3)
-        return response2.text
+        return response.text
 
 
     def notify_onealert(self):

@@ -30,7 +30,6 @@ class BaseClient:
                  feishu_app_id: str=None,
                  feishu_app_secret: str=None,
                  feishu_card_template_id: str=None,
-                #  feishu_card_template_variable: str=None,
                  feishu_card_receive_id: str=None,
                  wecom_webhook_url: str=None):
         

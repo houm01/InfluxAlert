@@ -56,7 +56,7 @@ class NoDataEndpoint(Endpoint):
                         entity_name=nodename,
                         is_notify=True)
                     
-    def trigger_windows_exporter(self):
+    def windows_exporter(self):
         query = """select
 *
 from windows_cs_hostname 
