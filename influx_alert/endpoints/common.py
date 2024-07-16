@@ -7,9 +7,9 @@ log = get_logger('no_data')
 ALARM_NAME_NO_DATA = '无监控数据'
 
 
-class NoDataEndpoint(Endpoint):
+class CommonEndpoint(Endpoint):
     
-    def node_exporter(self):
+    def no_data_node_exporter(self):
         query = """select
     *
     from node_uname_info 
@@ -34,6 +34,7 @@ class NoDataEndpoint(Endpoint):
                     alarm_content= results['nodename'] + ' ' + url.replace('http://', '').replace(':9100/metrics', '') + ' ' + ALARM_NAME_NO_DATA,
                     alarm_name=ALARM_NAME_NO_DATA,
                     priority='高',
+                    alarm_time=self.parent.extensions.time_get_now_time_mongo(),
                     entity_name=nodename,
                     is_notify=True)
 
@@ -56,7 +57,7 @@ class NoDataEndpoint(Endpoint):
                         entity_name=nodename,
                         is_notify=True)
                     
-    def windows_exporter(self):
+    def no_data_windows_exporter(self):
         query = """select
 *
 from windows_cs_hostname 
@@ -102,3 +103,24 @@ limit 1"""
                         priority='高',
                         entity_name=hostname,
                         is_notify=True)
+    
+    def not_resolved_trigger(self):
+        query = {
+            'resolved_time': {'$exists': False}
+        } 
+        for results in self.parent.mongo_client.find(query)
+            print(results)
+    
+    def ups_apc_battery_status(self):
+        query = """
+    SELECT "sysName", "upsBasicBatteryStatus" FROM "ups" WHERE time > now() - 10m group by "sysName" order by time desc limit 5
+    """
+        for results in self.parent.influx_client.query(query=query):
+            log.debug(results)
+            # ups_common(query=query_upsBasicBatteryStatus,
+            #         check_field='upsBasicBatteryStatus',
+            #         check_value='batteryNormal',
+            #         priority=const.PRIORITY_WARNING,
+            #         alarm_name=const.ALARM_NAME_UPS_STATUS, 
+            #         suggestion='')
+        

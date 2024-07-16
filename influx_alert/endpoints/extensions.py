@@ -43,6 +43,8 @@ class ExtensionsEndpoint(Endpoint):
     #     self.BFD_LIMIT = 8
 
     def time_convert_timeobj_to_str(self, timeobj: str=None, timezone_offset: int=8):
+        print(timeobj)
+        print(datetime.timedelta(hours=timezone_offset))
         time_obj_with_offset = timeobj + datetime.timedelta(hours=timezone_offset)
         return time_obj_with_offset.strftime("%Y-%m-%d %H:%M")
 
@@ -225,15 +227,13 @@ class ExtensionsEndpoint(Endpoint):
                                     entity_name: str=None,
                                     event_type: str='trigger',
                                     automate_ts: str='暂无',
-                                    suggestion: str='请参考链接中的文档处理',
-                                    referce_name: str='监控团队相关文档',
+                                    suggestion: str='',
+                                    referce_name: str='',
                                     referce_link: str='',
                                     alarm_time: str='',
                                     mongo_id: str=None,
                                     is_mongo: bool=True,
                                     is_notify: bool=True,
-                                    is_send_ehc: bool=False,
-                                    is_send_helpdesk: bool=False,
                                     mail_subject: str=None,
                                     mail_content: str=None):
             '''
@@ -294,28 +294,34 @@ class ExtensionsEndpoint(Endpoint):
                         "priority": priority, 
                         "alarmContent": alarm_content, 
                         "alarm_time": alarm_time,
-                        "details": '\n' + f'**自动排查**: {automate_ts}' + '\n' + '**处置建议**: ' + suggestion + '\n' + f'**参考文档**: [{referce_name}]({referce_link})' + '\n'
+                        "details": '\n' + f'{automate_ts}' + '\n' + '处置建议: ' + '\n' + suggestion + '\n' + f'参考文档: [{referce_name}]({referce_link})' + '\n'
                     }
-
+                    
                     template_variable= {
                         "color": feishu_card_color,
                         "alarm_time": self.time_convert_timeobj_to_str(timeobj=alarm_time, timezone_offset=0),
                         "alarm_name": alarm_name,
                         "alarm_content": alarm_content,
                         "priority": priority,
-                        "details": '该告警出现过: ' + str(self.query_alert_counter(alarm_content)) + '次' + '\n' + alert_dict['details']
+                        "details": '该告警出现过: ' + str(self.query_alert_counter(alarm_content)) + '\n' + alert_dict['details']
                     }
                     log.info(template_variable)
 
                     if self.parent.feishu_app_id:
-                        self.parent.feishu_client.message.send_card(
+                        resp  = self.parent.feishu_client.message.send_card(
                             template_id=self.parent.feishu_card_template_id,
                             template_variable= template_variable,
                             receive_id =self.parent.feishu_card_receive_id
                         )
+                        log.debug(f'发送飞书卡片消息: [{resp}]')
                     
                     if self.parent.wecom_webhook_url:
-                        self.notify_wecom_markdown(alert_dict=alert_dict)
+                        resp = self.notify_wecom_markdown(alert_dict=alert_dict)
+                        log.debug(f'发送企业微信消息: [{resp}]')
+                    
+                    if self.parent.onealert_webhook_url:
+                        resp = requests.request(method='POST', url=self.parent.onealert_webhook_url, json=alert_dict, headers=self.headers)
+                        log.debug(f'发送OneAlert消息,接收到回应: [{resp}]')
                     
 
     def mongo_check_alarm_exist(self, event_type, alarm_content) -> bool:
@@ -331,7 +337,6 @@ class ExtensionsEndpoint(Endpoint):
         if event_type == 'trigger':
             query = { "alarm_content": alarm_content }
             fields = {"alarm_name": 1, "alarm_time": 1, "resolved_time": 1}
-            # result = self.collection.find(query, fields).sort({ "_id": pymongo.DESCENDING }).limit(1)
             result = self.parent.mongo_client.find(query, fields).sort({ "_id": pymongo.DESCENDING }).limit(1)
             
             if self.parent.mongo_client.count_documents(query) == 0:
@@ -377,17 +382,7 @@ class ExtensionsEndpoint(Endpoint):
             "entity_name": entity_name
         }
         
-        # 匹配 45xxx 和 45xxx-bboh
-        pattern = r"45\d+(-\w+)?"
-        
-        try:
-            storeid = re.search(pattern, alarm_content).group()
-            data['storeid'] = storeid
-        except Exception as e:
-            log.error(f'匹配 [{alarm_content}] 出错, 无法获取到 storeid, {e}')
-            
         log.debug(f'没有插入过数据, [{data}]')
-        # resp = self.collection.insert_one(data)
         resp = self.parent.mongo_client.insert_one(data)
         log.debug(resp)
         return resp.acknowledged
@@ -410,18 +405,22 @@ class ExtensionsEndpoint(Endpoint):
         # return self.collection.update_one(filter_doc, update)
         return self.parent.mongo_client.update_one(filter_doc, update)
     
-    def mongo_query_trigger(self, alarm_name):
+    def mongo_query_trigger(self, alarm_name: str=None):
         '''
         _summary_
 
         Returns:
             _type_: _description_
         '''
-        query = {
-            'alarm_name': alarm_name,
-            'resolved_time': {'$exists': False}
-        }
-        # return self.collection.find(query)
+        if alarm_name:
+            query = {
+                'alarm_name': alarm_name,
+                'resolved_time': {'$exists': False}
+            }
+        else:
+            query = {
+                'resolved_time': {'$exists': False}
+            } 
         return self.parent.mongo_client.find(query)
 
     def notify_feishu_markdown(self):
@@ -549,7 +548,37 @@ class ExtensionsEndpoint(Endpoint):
         Returns:
             str: _description_
         '''
-        query = {"alarm_content": alarm_content}
+        # query = {"alarm_content": alarm_content}
         # count = mongo.collection.count_documents(query)
-        return self.parent.mongo_client.count_documents(query)
+        # return self.parent.mongo_client.count_documents(query)
         # return count
+
+
+        query = {
+            "alarm_content": alarm_content,
+            'resolved_time': {
+                '$exists': True,  # 字段必须存在
+            }
+        }
+        fields = {"_id": 0, 'alarm_time': 1, 'resolved_time': 1}
+        results = self.parent.mongo_client.find(query, fields).sort('alarm_time', -1)
+        
+        alarm_list = []
+        for result in results:
+            duration_minute = '持续 ' + str(int((result['resolved_time'] - result['alarm_time']).total_seconds() / 60)) + ' 分钟'
+            alarm_list.append('触发告警: ' + self.time_convert_timeobj_to_str(timeobj=result['alarm_time']) + ' ' + duration_minute)
+
+        alarm_str = '\n'.join(alarm_list)
+        
+        alarm_str_display_threshold = 10
+        
+        if len(alarm_list) > alarm_str_display_threshold:
+            # 如果告警超过 10 个
+            alarm_counter = alarm_str_display_threshold
+            alarm_str = '\n'.join(alarm_list[:alarm_str_display_threshold])
+        else:
+            # 如果不超过 10 个
+            alarm_counter = len(alarm_list)
+            alarm_str = '\n'.join(alarm_list)
+            
+        return '该告警出现过' + str(len(alarm_list)) + f'次\n最近 {alarm_counter} 次告警如下: \n' + alarm_str

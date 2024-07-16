@@ -1,8 +1,8 @@
 
 
-from .endpoints.ping import PingEndpoint
+from .endpoints.network import NetworkEndpoint
 from .endpoints.vmware import VMWareEndpoint
-from .endpoints.no_data import NoDataEndpoint
+from .endpoints.common import CommonEndpoint
 from .endpoints.extensions import ExtensionsEndpoint
 from influxdb import InfluxDBClient
 import urllib3
@@ -31,7 +31,9 @@ class BaseClient:
                  feishu_app_secret: str=None,
                  feishu_card_template_id: str=None,
                  feishu_card_receive_id: str=None,
-                 wecom_webhook_url: str=None):
+                 wecom_webhook_url: str=None,
+                 onealert_webhook_url: str=None,
+                 debug: bool=False):
         
         self._influx_host = influx_host
         self._influx_port = influx_port
@@ -54,15 +56,18 @@ class BaseClient:
         self.feishu_card_receive_id = feishu_card_receive_id
         
         self.wecom_webhook_url = wecom_webhook_url
+        self.onealert_webhook_url = onealert_webhook_url
+        
+        self.debug = debug
         
         self.influx_client = self._build_influxdb_client()
         self.mongo_client = self._build_mongo_client()
         self.feishu_client = self._build_feishu_client()
 
-        self.ping = PingEndpoint(self)
+        self.network = NetworkEndpoint(self)
         self.vmware = VMWareEndpoint(self)
         self.extensions = ExtensionsEndpoint(self)
-        self.no_data = NoDataEndpoint(self)
+        self.common = CommonEndpoint(self)
         
 
     def _build_influxdb_client(self):
@@ -89,8 +94,10 @@ class Client(BaseClient):
                              username=self._mongo_username,
                              password=self._mongo_password,
                              authSource=self._mongo_authsource)
-        
-        return client['automate']['alert'] 
+        if self.debug:
+            return client['automate']['alert_debug'] 
+        else:
+            return client['automate']['alert']
     
     def _build_feishu_client(self):
         return FeishuClient(app_id=self.feishu_app_id, app_secret=self.feishu_app_secret)
