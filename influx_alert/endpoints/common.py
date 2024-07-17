@@ -5,7 +5,7 @@ log = get_logger('no_data')
 
 
 ALARM_NAME_NO_DATA = '无监控数据'
-
+ALARM_NAME_UPS_BATTERY_NEEDS_REPLACING = 'UPS 电池需更换'
 
 class CommonEndpoint(Endpoint):
     
@@ -108,19 +108,34 @@ limit 1"""
         query = {
             'resolved_time': {'$exists': False}
         } 
-        for results in self.parent.mongo_client.find(query)
+        for results in self.parent.mongo_client.find(query):
             print(results)
     
-    def ups_apc_battery_status(self):
-        query = """
-    SELECT "sysName", "upsBasicBatteryStatus" FROM "ups" WHERE time > now() - 10m group by "sysName" order by time desc limit 5
+    def ups_apc_advbattery_replace_indicator(self, suggestion):
+        query= """
+    SELECT "sysName", "upsAdvBatteryReplaceIndicator"  FROM "ups" WHERE time > now() - 10m group by "sysName" order by time desc limit 5
     """
         for results in self.parent.influx_client.query(query=query):
-            log.debug(results)
+            # log.debug(results)
+            has_loss = all(result['upsAdvBatteryReplaceIndicator'] == 'batteryNeedsReplacing' for result in results)
+            if has_loss:
+                log.debug(results)
+                sysname = results[0]['sysName']
             # ups_common(query=query_upsBasicBatteryStatus,
             #         check_field='upsBasicBatteryStatus',
             #         check_value='batteryNormal',
             #         priority=const.PRIORITY_WARNING,
             #         alarm_name=const.ALARM_NAME_UPS_STATUS, 
             #         suggestion='')
-        
+                self.parent.extensions.tool_check_insert_send_mongo(
+                    restore_influx=f"""SELECT last("upsAdvBatteryReplaceIndicator")  FROM "ups" WHERE "sysName" = '{sysname}'""",
+                    url=sysname,
+                    alarm_name=ALARM_NAME_UPS_BATTERY_NEEDS_REPLACING,
+                    entity_name=sysname,
+                    alarm_content=f'{sysname} {ALARM_NAME_UPS_BATTERY_NEEDS_REPLACING}',
+                    alarm_time=self.parent.extensions.time_get_now_time_mongo(),
+                    priority='warning',
+                    is_notify=True,
+                    suggestion=suggestion)
+                break
+    

@@ -16,6 +16,7 @@ from ..endpoint import Endpoint
 
 log = get_logger('extensions')
 
+HEADERS_JSON = {'Content-Type': 'application/json'}
 
 class ExtensionsEndpoint(Endpoint):
     
@@ -293,8 +294,8 @@ class ExtensionsEndpoint(Endpoint):
                         "entityName": entity_name, 
                         "priority": priority, 
                         "alarmContent": alarm_content, 
-                        "alarm_time": alarm_time,
-                        "details": '\n' + f'{automate_ts}' + '\n' + '处置建议: ' + '\n' + suggestion + '\n' + f'参考文档: [{referce_name}]({referce_link})' + '\n'
+                        "alarm_time": self.time_convert_timeobj_to_str(timeobj=alarm_time, timezone_offset=0),
+                        "details": '自动排查' + '\n' + f'{automate_ts}' + '\n' + '处置建议: ' + '\n' + suggestion + '\n' + f'参考文档: [{referce_name}]({referce_link})' + '\n'
                     }
                     
                     template_variable= {
@@ -320,7 +321,8 @@ class ExtensionsEndpoint(Endpoint):
                         log.debug(f'发送企业微信消息: [{resp}]')
                     
                     if self.parent.onealert_webhook_url:
-                        resp = requests.request(method='POST', url=self.parent.onealert_webhook_url, json=alert_dict, headers=self.headers)
+                        log.warning(alert_dict)
+                        resp = requests.request(method='POST', url=self.parent.onealert_webhook_url, json=alert_dict, headers=HEADERS_JSON)
                         log.debug(f'发送OneAlert消息,接收到回应: [{resp}]')
                     
 
