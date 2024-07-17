@@ -112,21 +112,19 @@ limit 1"""
             print(results)
     
     def ups_apc_advbattery_replace_indicator(self, suggestion):
-        query= """
-    SELECT "sysName", "upsAdvBatteryReplaceIndicator"  FROM "ups" WHERE time > now() - 10m group by "sysName" order by time desc limit 5
-    """
+    #     query= """
+    # SELECT "sysName", "upsAdvBatteryReplaceIndicator"  FROM "ups" WHERE time > now() - 10m group by "sysName" order by time desc limit 5
+    # """
+        query = """
+    SELECT "sysName", last("upsAdvBatteryReplaceIndicator")  FROM "ups" WHERE "upsAdvBatteryReplaceIndicator" = 'batteryNeedsReplacing' group by "sysName"
+        """
         for results in self.parent.influx_client.query(query=query):
-            # log.debug(results)
-            has_loss = all(result['upsAdvBatteryReplaceIndicator'] == 'batteryNeedsReplacing' for result in results)
-            if has_loss:
-                log.debug(results)
+            log.debug(results)
+            # has_loss = all(result['upsAdvBatteryReplaceIndicator'] == 'batteryNeedsReplacing' for result in results)
+            # if has_loss:
+            if results[0]['last']:
+            #     log.debug(results)
                 sysname = results[0]['sysName']
-            # ups_common(query=query_upsBasicBatteryStatus,
-            #         check_field='upsBasicBatteryStatus',
-            #         check_value='batteryNormal',
-            #         priority=const.PRIORITY_WARNING,
-            #         alarm_name=const.ALARM_NAME_UPS_STATUS, 
-            #         suggestion='')
                 self.parent.extensions.tool_check_insert_send_mongo(
                     restore_influx=f"""SELECT last("upsAdvBatteryReplaceIndicator")  FROM "ups" WHERE "sysName" = '{sysname}'""",
                     url=sysname,
@@ -137,5 +135,5 @@ limit 1"""
                     priority='warning',
                     is_notify=True,
                     suggestion=suggestion)
-                break
+                
     
