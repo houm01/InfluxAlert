@@ -49,8 +49,7 @@ class BaseClient:
         self._mongo_authsource = mongo_authsource
         self._mongo_database = mongo_database
 
-        if feishu_app_id:
-            from cc_feishu.client import Client as FeishuClient
+
         self.feishu_app_id = feishu_app_id
         self.feishu_app_secret = feishu_app_secret
         self.feishu_card_template_id = feishu_card_template_id
@@ -103,6 +102,8 @@ class Client(BaseClient):
             return client[self._mongo_database]['alert']
     
     def _build_feishu_client(self):
+        # print(self.feishu_app_id)
         if self.feishu_app_id:
+            from cc_feishu.client import Client as FeishuClient
             return FeishuClient(app_id=self.feishu_app_id, app_secret=self.feishu_app_secret)
     

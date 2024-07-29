@@ -55,7 +55,53 @@ class NetworkEndpoint(Endpoint):
                         priority=mongo_item['priority'],
                         is_notify=True)
 
-
+    def packet_loss(self, last_minute: int=30, packet_loss_percent_trigger: int=0.95):
+        QUERY = f"""select "percent_packet_loss", "url" from ping WHERE time > now() - {last_minute}m group by url"""
+        log.debug(f'packet loss trigger, 查询语法: [{QUERY}]')
+        
+        for results in self.parent.influx_client.query(QUERY):        
+            count_packet_loss = 0
+            for result in results:
+                if result['percent_packet_loss'] == 0.0:
+                    count_packet_loss += 1
+            
+            packet_loss_percent = count_packet_loss / len(results)
+            
+            if 0.0 < packet_loss_percent < packet_loss_percent_trigger:
+                
+                url = results[0]['url']
+                
+                alarm_content = '{url} Ping 丢包率超阀值'
+                self.parent.extensions.tool_check_insert_send_mongo(
+                    restore_influx=f"""select "percent_packet_loss" from ping where "url" = '{url}' and time > now() - {last_minute}m""",
+                    url=url,
+                    alarm_name='Ping 丢包率超阀值',
+                    entity_name=url,
+                    alarm_content=alarm_content,
+                    alarm_time=self.parent.extensions.time_get_now_time_mongo(),
+                    priority='Warning',
+                    is_notify=True,
+                    automate_ts=f'设定的阀值为{packet_loss_percent_trigger}, 近{last_minute}分钟丢包率为{packet_loss_percent}')
+                
+        for mongo_item in self.parent.extensions.mongo_query_trigger(alarm_name='Ping 丢包率超阀值'):
+            for results in self.parent.influx_client.query(mongo_item['restore_influx']):
+                
+                count_packet_loss = 0
+                for result in results:
+                    if result['percent_packet_loss'] == 0.0:
+                        count_packet_loss += 1
+                        
+                packet_loss_percent = count_packet_loss / len(results)
+                if packet_loss_percent > packet_loss_percent_trigger:
+                    self.parent.extensions.tool_check_insert_send_mongo(
+                        event_type='resolved',
+                        mongo_id=mongo_item['_id'],
+                        event_id=mongo_item['event_id'],
+                        entity_name=mongo_item['entity_name'],
+                        alarm_name=mongo_item['alarm_name'],
+                        alarm_content=mongo_item['alarm_content'],
+                        priority=mongo_item['priority'],
+                        is_notify=True)
 
     def port_traffic(self, 
              sysname: str=None, 

@@ -20,18 +20,22 @@ class CommonEndpoint(Endpoint):
         
         log.debug(f'query: [{query.strip()}]')
         for results in self.parent.influx_client.query(query=query):
-            diff_now = self.parent.extensions.time_diff_influx_now(source_time=results['time'])
+            # print(results)
+            diff_now = self.parent.extensions.time_diff_influx_now(source_time=results[0]['time'])
             log.debug(diff_now)
+
             
             if diff_now > 3:
-                nodename = results['nodename']
+                # print(results)
+                nodename = results[0]['nodename']
                 
                 for url_dict in self.parent.influx_client.query(f"""select * from node_uname_info where "nodename" = '{nodename}' order by time desc limit 1"""):
-                    url = url_dict['url']
+                    # print(url_dict)
+                    url = url_dict[0]['url']
                 
                 self.parent.extensions.tool_check_insert_send_mongo(
                     restore_influx=f"""select last(*) from node_uname_info where "url" = '{url}'""",
-                    alarm_content= results['nodename'] + ' ' + url.replace('http://', '').replace(':9100/metrics', '') + ' ' + ALARM_NAME_NO_DATA,
+                    alarm_content= results[0]['nodename'] + ' ' + url.replace('http://', '').replace(':9100/metrics', '') + ' ' + ALARM_NAME_NO_DATA,
                     alarm_name=ALARM_NAME_NO_DATA,
                     priority='高',
                     alarm_time=self.parent.extensions.time_get_now_time_mongo(),
@@ -45,7 +49,7 @@ class CommonEndpoint(Endpoint):
             for results in self.parent.influx_client.query(mongo_item['restore_influx']):
                 log.debug(results)
                 
-                diff_now = self.parent.extensions.time_diff_influx_now(source_time=results['time'])
+                diff_now = self.parent.extensions.time_diff_influx_now(source_time=results[0]['time'])
                 nodename = mongo_item['entity_name']
                 
                 if diff_now < 3:
@@ -68,8 +72,8 @@ limit 1"""
         
         log.debug(f'query: [{query.strip()}]')
         for results in self.parent.influx_client.query(query=query):
-            hostname = results['hostname']
-            diff_now = self.parent.extensions.time_diff_influx_now(source_time=results['time'])
+            hostname = results[0]['hostname']
+            diff_now = self.parent.extensions.time_diff_influx_now(source_time=results[0]['time'])
             log.debug(f'{hostname} {diff_now}')
             if diff_now > 5:
                 
@@ -91,7 +95,7 @@ limit 1"""
             for results in self.parent.influx_client.query(mongo_item['restore_influx']):
                 log.debug(results)
                 
-                diff_now = self.parent.extensions.time_diff_influx_now(source_time=results['time'])
+                diff_now = self.parent.extensions.time_diff_influx_now(source_time=results[0]['time'])
                 hostname = mongo_item['entity_name']
                 
                 if diff_now < 3:
