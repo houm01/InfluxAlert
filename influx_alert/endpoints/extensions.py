@@ -44,10 +44,12 @@ class ExtensionsEndpoint(Endpoint):
     #     self.BFD_LIMIT = 8
 
     def time_convert_timeobj_to_str(self, timeobj: str=None, timezone_offset: int=8):
-        print(timeobj)
-        print(datetime.timedelta(hours=timezone_offset))
-        time_obj_with_offset = timeobj + datetime.timedelta(hours=timezone_offset)
-        return time_obj_with_offset.strftime("%Y-%m-%d %H:%M")
+        try:
+            time_obj_with_offset = timeobj + datetime.timedelta(hours=timezone_offset)
+            return time_obj_with_offset.strftime("%Y-%m-%d %H:%M")
+        except TypeError:
+            log.error(f'时间对象转换失败, 传入的时间对象: [{timeobj}], 时间偏移: [{timezone_offset}]')
+            return '时间转换失败'
 
     @staticmethod
     def convert_timeobj_to_str_date(timeobj):
@@ -306,25 +308,30 @@ class ExtensionsEndpoint(Endpoint):
                         "priority": priority,
                         "details": '该告警出现过: ' + str(self.query_alert_counter(alarm_content)) + '\n' + alert_dict['details']
                     }
-                    log.info(template_variable)
+                    # log.info(template_variable)
+                    log.info(alert_dict)
 
-                    if self.parent.feishu_app_id:
-                        resp  = self.parent.feishu_client.message.send_card(
-                            template_id=self.parent.feishu_card_template_id,
-                            template_variable= template_variable,
-                            receive_id =self.parent.feishu_card_receive_id
-                        )
-                        log.debug(f'发送飞书卡片消息: [{resp}]')
-                    
-                    if self.parent.wecom_webhook_url:
-                        resp = self.notify_wecom_markdown(alert_dict=alert_dict)
-                        log.debug(f'发送企业微信消息: [{resp}]')
-                    
-                    if self.parent.onealert_webhook_url:
-                        log.warning(alert_dict)
-                        resp = requests.request(method='POST', url=self.parent.onealert_webhook_url, json=alert_dict, headers=HEADERS_JSON)
-                        log.debug(f'发送OneAlert消息,接收到回应: [{resp}]')
-                    
+                    if not self.parent.debug:
+
+                        if self.parent.feishu_app_id:
+                            resp  = self.parent.feishu_client.message.send_card(
+                                template_id=self.parent.feishu_card_template_id,
+                                template_variable= template_variable,
+                                receive_id =self.parent.feishu_card_receive_id
+                            )
+                            log.debug(f'发送飞书卡片消息: [{resp}]')
+                        
+                        if self.parent.wecom_webhook_url:
+                            resp = self.notify_wecom_markdown(alert_dict=alert_dict)
+                            log.debug(f'发送企业微信消息: [{resp}]')
+                        
+                        if self.parent.onealert_webhook_url:
+                            log.warning(alert_dict)
+                            resp = requests.request(method='POST', url=self.parent.onealert_webhook_url, json=alert_dict, headers=HEADERS_JSON)
+                            log.debug(f'发送OneAlert消息,接收到回应: [{resp}]')
+                        
+                    else:
+                        log.debug(alert_dict)
 
     def mongo_check_alarm_exist(self, event_type, alarm_content) -> bool:
         '''

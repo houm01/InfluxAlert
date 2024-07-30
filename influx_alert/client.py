@@ -102,7 +102,6 @@ class Client(BaseClient):
             return client[self._mongo_database]['alert']
     
     def _build_feishu_client(self):
-        # print(self.feishu_app_id)
         if self.feishu_app_id:
             from cc_feishu.client import Client as FeishuClient
             return FeishuClient(app_id=self.feishu_app_id, app_secret=self.feishu_app_secret)

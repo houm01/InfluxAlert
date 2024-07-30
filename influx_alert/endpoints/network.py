@@ -55,23 +55,31 @@ class NetworkEndpoint(Endpoint):
                         priority=mongo_item['priority'],
                         is_notify=True)
 
-    def packet_loss(self, last_minute: int=30, packet_loss_percent_trigger: int=0.95):
-        QUERY = f"""select "percent_packet_loss", "url" from ping WHERE time > now() - {last_minute}m group by url"""
+    def packet_loss(self, name: str=None, last_minute: int=10, packet_loss_percent_trigger: int=0.05):
+        
+        QUERY = f"""select "{name}", "percent_packet_loss", "url" from ping WHERE time > now() - {last_minute}m group by url"""
+            
         log.debug(f'packet loss trigger, 查询语法: [{QUERY}]')
         
         for results in self.parent.influx_client.query(QUERY):        
             count_packet_loss = 0
             for result in results:
-                if result['percent_packet_loss'] == 0.0:
+                if result['percent_packet_loss'] != 0.0:
                     count_packet_loss += 1
             
             packet_loss_percent = count_packet_loss / len(results)
             
-            if 0.0 < packet_loss_percent < packet_loss_percent_trigger:
+            # log.info(packet_loss_percent)
+            if 1.0 > packet_loss_percent > packet_loss_percent_trigger:
                 
+                try:
+                    name = results[0][name]
+                except KeyError:
+                    log.error(f'获取name失败, results为 {results[0]}')
+                    name = 'null'
                 url = results[0]['url']
                 
-                alarm_content = '{url} Ping 丢包率超阀值'
+                alarm_content = f'{name} {url} Ping 丢包率超阀值'
                 self.parent.extensions.tool_check_insert_send_mongo(
                     restore_influx=f"""select "percent_packet_loss" from ping where "url" = '{url}' and time > now() - {last_minute}m""",
                     url=url,
@@ -81,7 +89,7 @@ class NetworkEndpoint(Endpoint):
                     alarm_time=self.parent.extensions.time_get_now_time_mongo(),
                     priority='Warning',
                     is_notify=True,
-                    automate_ts=f'设定的阀值为{packet_loss_percent_trigger}, 近{last_minute}分钟丢包率为{packet_loss_percent}')
+                    automate_ts=f'设定的阀值为{packet_loss_percent_trigger* 100:.0f}%, 近{last_minute}分钟丢包率为{packet_loss_percent * 100:.0f}%')
                 
         for mongo_item in self.parent.extensions.mongo_query_trigger(alarm_name='Ping 丢包率超阀值'):
             for results in self.parent.influx_client.query(mongo_item['restore_influx']):
